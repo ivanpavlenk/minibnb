@@ -1,0 +1,12 @@
+{
+  "name": "minibnb",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "4.22.2",
+    "express-openapi-validator": "5.6.2"
+  }
+}
