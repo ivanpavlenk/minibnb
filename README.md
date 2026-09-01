@@ -3,7 +3,7 @@
 **Variant B** — runtime validation at the boundary (`express-openapi-validator`).
 Variant A (Pact) is not used.
 
-The OpenAPI spec is the source of truth. A small Express server loads that spec, validates requests and responses against it, and maps validator errors to `application/problem+json`. Data lives in memory (arrays / `Map`). There is no database.
+The OpenAPI spec is the source of truth. A NestJS (Express adapter) server loads that spec, validates requests and responses against it, and maps validator errors to `application/problem+json`. Data lives in memory (arrays / `Map`). There is no database.
 
 ## Install and run
 
@@ -91,5 +91,7 @@ Response has `items` and `next_cursor` (`null` means no further pages). Pass `ne
 | Path | Role |
 |---|---|
 | `openapi/openapi.yaml` | Contract: 2 resources, 5 operations, cursor pagination, Idempotency-Key, problem+json |
-| `src/app.js` | Express app, OpenAPI validator, in-memory data |
-| `src/server.js` | `npm start` entrypoint |
+| `src/main.ts` | Nest bootstrap, OpenAPI validator, problem+json error mapper |
+| `src/listings/` | Listings controller + service (cursor pagination) |
+| `src/bookings/` | Bookings controller + service (Idempotency-Key) |
+| `src/store/` | In-memory data |

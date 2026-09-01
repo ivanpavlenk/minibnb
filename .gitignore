@@ -1,3 +1,5 @@
 node_modules/
 spec.json
 .idea
+dist/
+body-*.json
