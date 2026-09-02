@@ -3,3 +3,5 @@ spec.json
 .idea
 dist/
 body-*.json
+.env
+secrets/

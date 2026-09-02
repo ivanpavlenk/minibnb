@@ -1,9 +1,26 @@
-import { Module } from '@nestjs/common';
-import { BookingsModule } from './bookings/bookings.module';
-import { ListingsModule } from './listings/listings.module';
-import { StoreModule } from './store/store.module';
+import {Module} from '@nestjs/common';
+import {BookingsModule} from './bookings/bookings.module';
+import {ListingsModule} from './listings/listings.module';
+import {StoreModule} from './store/store.module';
+import {ConfigModule} from "@nestjs/config";
+import {validate} from "./config/env.schema";
+import {HealthModule} from "./health/health.module";
+import {DbModule} from "./db/db.module";
+
 
 @Module({
-  imports: [StoreModule, ListingsModule, BookingsModule],
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+            validate,
+        }),
+        StoreModule,
+        HealthModule,
+        DbModule,
+        ListingsModule,
+        BookingsModule,
+
+    ],
 })
-export class AppModule {}
+export class AppModule {
+}

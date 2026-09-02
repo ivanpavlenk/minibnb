@@ -14,6 +14,38 @@ tags:
     description: Bookings
 
 paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Process uptime and database ping
+      responses:
+        '200':
+          description: Process is up and can query Postgres
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ uptime, db ]
+                properties:
+                  uptime:
+                    type: number
+                    description: Seconds since this process started
+                  db:
+                    type: string
+                    enum: [ ok ]
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Database is unreachable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /listings:
     get:
       operationId: listListings

@@ -5,6 +5,8 @@ import { json, NextFunction, Request, Response, urlencoded } from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
 import { AppModule } from './app.module';
 import { ProblemExceptionFilter } from './common/problem.filter';
+import {ConfigService} from "@nestjs/config";
+import {Env} from "./config/env.schema";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -33,7 +35,8 @@ async function bootstrap(): Promise<void> {
     });
   });
 
-  const port = Number(process.env.PORT) || 3000;
+  const config = app.get(ConfigService<Env, true>);
+  const port = config.get('PORT', { infer: true });
   await app.listen(port);
   console.log(`MiniBnB API listening on http://localhost:${port}`);
 }
