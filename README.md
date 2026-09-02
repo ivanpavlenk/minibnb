@@ -1,20 +1,100 @@
-# MiniBnB — HW 1 (API contract)
+# MiniBnB
 
-**Variant B** — runtime validation at the boundary (`express-openapi-validator`).
-Variant A (Pact) is not used.
-
-The OpenAPI spec is the source of truth. A NestJS (Express adapter) server loads that spec, validates requests and responses against it, and maps validator errors to `application/problem+json`. Data lives in memory (arrays / `Map`). There is no database.
+Listings and bookings stay in memory. Postgres is used for `/health` and password rotation (DB schema/migrations come in later homeworks).
 
 ## Install and run
 
 ```bash
 npm install
+cp .env.example .env          # Unix
+# Windows: copy .env.example .env
+docker compose up -d
 npm start
 ```
 
+If port 5432 is already taken on the host, keep compose mapping `5433:5432` and set `DB_PORT=5433` in `.env`.
+
 Server: http://localhost:3000
 
-## Spec checks (acceptance criteria)
+`start` is a one-shot process (`tsc && node`), not watch. Use `npm run start:dev` only for local reload.
+
+## Configuration
+
+Env is validated on boot by `src/config/env.schema.ts` via `ConfigModule.forRoot({ validate })`. A broken variable kills the process (exit ≠ 0) with the variable name in the error. Application code reads `ConfigService<Env, true>` only — no `process.env`.
+
+The database password is **not** an env var. It is read from the file in `DB_PASSWORD_FILE` on every new `pg.Pool` connection.
+
+| Variable | Required | Meaning |
+|---|---|---|
+| `NODE_ENV` | no (default `development`) | `development` \| `test` \| `production` |
+| `PORT` | no (default `3000`) | HTTP port |
+| `DB_HOST` | yes | Postgres host |
+| `DB_PORT` | no (default `5432`) | Postgres port |
+| `DB_NAME` | yes | Database name |
+| `DB_USER` | yes | Database user |
+| `DB_PASSWORD_FILE` | yes | Path to the password file (not the password) |
+
+`.env.example` is the contract in git (fake values + comments). Real `.env` is gitignored. Sync check:
+
+```bash
+npm run check:env
+```
+
+Create the password file (must match `POSTGRES_PASSWORD` / `init.sql` on first boot):
+
+```bash
+mkdir -p secrets
+echo -n minibnb > secrets/db_password
+```
+
+### Fail-fast
+
+Temporarily hide `.env` so dotenv cannot fill gaps, then start without a required variable:
+
+```bash
+mv .env /tmp
+env -u DB_HOST npm run start
+echo $?
+mv /tmp/.env .
+```
+
+Expect exit ≠ 0 and `DB_HOST` in the output.
+
+### Password rotation (no process restart)
+
+Keep `npm start` running.
+
+```bash
+curl -s http://localhost:3000/health   # remember uptime
+bash rotate.sh                         # default new password: minibnb-rotated
+curl -s http://localhost:3000/health   # 200, db=ok, uptime larger than before
+```
+
+`rotate.sh` order: `ALTER ROLE` → rewrite `secrets/db_password` → `pg_terminate_backend`. Restore the starter password with `bash rotate.sh minibnb`.
+
+After `docker compose down -v`, Postgres is back to password `minibnb`. Put `minibnb` in `secrets/db_password` again or auth fails.
+
+### Docker image (no secrets in layers)
+
+```bash
+docker build -t myapp .
+docker run --rm myapp ls -a /app
+docker run --rm myapp sh -c 'cat /app/.env' 2>&1
+docker inspect --format '{{.Config.Env}}' myapp
+docker history --no-trunc myapp | grep -i password
+```
+
+Expect `.env.example` present, no `.env`, no `secrets/`, `cat .env` → No such file, inspect/history without passwords.
+
+### Infisical (optional, no extra points)
+
+Secrets for env vars can live in Infisical. The DB password file stays on disk so rotation still works.
+
+```bash
+infisical.cmd run --env=dev -- npm run start   # Windows PowerShell
+```
+
+## HW 1 spec checks
 
 Run from the repo root after `npm install`. On Windows use **Git Bash** for `grep` and the `node -e` one-liner.
 
@@ -40,12 +120,12 @@ grep -c 'application/problem+json' openapi/openapi.yaml
 
 Expected: ≥ 1, ≥ 1, ≥ 2.
 
-## Variant B checks (server must be running)
+## HW 1 API checks (server must be running)
 
 Domain is Airbnb-like, so the create endpoint is `POST /bookings` (not `/orders`).
-Invalid body uses `guests: 0` (schema `minimum: 1`) — same role as empty `items` in the marketplace draft.
+Invalid body uses `guests: 0` (schema `minimum: 1`).
 
-**No Idempotency-Key → 400 `application/problem+json`** (the spec requires the header, not an `if` in the handler):
+**No Idempotency-Key → 400 `application/problem+json`:**
 
 ```bash
 curl -i -X POST http://localhost:3000/bookings \
@@ -53,9 +133,7 @@ curl -i -X POST http://localhost:3000/bookings \
   -d '{"listing_id":1,"check_in":"2026-09-01","check_out":"2026-09-05","guests":2}'
 ```
 
-Expected `detail`: `request/headers must have required property 'idempotency-key'`.
-
-**Invalid body → 400** from the validator:
+**Invalid body → 400:**
 
 ```bash
 curl -i -X POST http://localhost:3000/bookings \
@@ -64,9 +142,7 @@ curl -i -X POST http://localhost:3000/bookings \
   -d '{"listing_id":1,"check_in":"2026-09-01","check_out":"2026-09-05","guests":0}'
 ```
 
-Expected `detail` about `guests` / minimum.
-
-**Valid request → 201**:
+**Valid request → 201:**
 
 ```bash
 curl -i -X POST http://localhost:3000/bookings \
@@ -78,20 +154,20 @@ curl -i -X POST http://localhost:3000/bookings \
 Same key + same body again → 201 and `Idempotency-Replay: true`.
 Same key + different body → 422 `application/problem+json`.
 
-Cursor pagination:
-
 ```bash
 curl -i "http://localhost:3000/listings?limit=2"
 ```
-
-Response has `items` and `next_cursor` (`null` means no further pages). Pass `next_cursor` as-is into `cursor` for the next page.
 
 ## Layout
 
 | Path | Role |
 |---|---|
-| `openapi/openapi.yaml` | Contract: 2 resources, 5 operations, cursor pagination, Idempotency-Key, problem+json |
-| `src/main.ts` | Nest bootstrap, OpenAPI validator, problem+json error mapper |
-| `src/listings/` | Listings controller + service (cursor pagination) |
-| `src/bookings/` | Bookings controller + service (Idempotency-Key) |
-| `src/store/` | In-memory data |
+| `openapi/openapi.yaml` | Contract: listings, bookings, health, cursor, Idempotency-Key, problem+json |
+| `src/config/env.schema.ts` | Zod env schema + fail-fast `validate` |
+| `scripts/check-env-example.mjs` | `.env.example` vs schema (`npm run check:env`) |
+| `src/db/` | `pg.Pool`, password from file |
+| `src/health/` | `GET /health` (uptime + DB ping) |
+| `secrets/db_password` | DB password file (gitignored) |
+| `rotate.sh` | Password rotation without process restart |
+| `docker-compose.yml` | Local Postgres |
+| `Dockerfile` / `.dockerignore` | Image without `.env` or `secrets/` |
