@@ -10,6 +10,9 @@ export const envSchema = z.object({
     DB_USER: z.string().min(1),
     
     DB_PASSWORD_FILE: z.string().min(1),
+
+    // Real value lives in Infisical (dev/prod). Fake password only in .env.example.
+    DATABASE_URL: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

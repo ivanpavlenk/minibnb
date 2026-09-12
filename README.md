@@ -1,14 +1,45 @@
 # MiniBnB
 
-Listings and bookings stay in memory. Postgres is used for `/health` and password rotation (DB schema/migrations come in later homeworks).
+Listings/bookings HTTP handlers still use in-memory data for HW1. HW3 puts MiniBnB tables in Postgres (`db/`). **Main table: `bookings`.**
 
-## Install and run
+## Raise Postgres / connect (fresh clone)
+
+```bash
+docker compose up -d --wait
+```
+
+```bash
+docker compose exec -T postgres psql -U minibnb -d minibnb -Atc "SELECT 1"
+```
+
+Dev credentials are in `docker-compose.yml` (user/password/db `minibnb`). For the Nest app copy `secrets/db_password.example` → `secrets/db_password`.
+
+## Schema, seed, EXPLAIN
+
+```bash
+docker compose down -v && docker compose up -d --wait
+docker compose exec -T postgres psql -U minibnb -d minibnb -f - < db/schema.sql
+docker compose exec -T postgres psql -U minibnb -d minibnb -f - < db/seed.sql
+docker compose exec -T postgres psql -U minibnb -d minibnb -Atc "SELECT count(*) FROM bookings;"
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "EXPLAIN (ANALYZE, BUFFERS) $(cat db/queries/q1.sql)"
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "EXPLAIN (ANALYZE, BUFFERS) $(cat db/queries/q2.sql)"
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "EXPLAIN (ANALYZE, BUFFERS) $(cat db/queries/q3.sql)"
+docker compose exec -T postgres psql -U minibnb -d minibnb -f - < db/indexes.sql
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "ANALYZE;"
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "EXPLAIN (ANALYZE, BUFFERS) $(cat db/queries/q1.sql)"
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "EXPLAIN (ANALYZE, BUFFERS) $(cat db/queries/q2.sql)"
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "EXPLAIN (ANALYZE, BUFFERS) $(cat db/queries/q3.sql)"
+```
+
+On Git Bash, prefix `docker compose exec` with `MSYS_NO_PATHCONV=1` if paths get rewritten.
+
+## Install and run the API
 
 ```bash
 npm install
 cp .env.example .env          # Unix
 # Windows: copy .env.example .env
-docker compose up -d
+docker compose up -d --wait
 npm start
 ```
 
@@ -33,6 +64,7 @@ The database password is **not** an env var. It is read from the file in `DB_PAS
 | `DB_NAME` | yes | Database name |
 | `DB_USER` | yes | Database user |
 | `DB_PASSWORD_FILE` | yes | Path to the password file (not the password) |
+| `DATABASE_URL` | no | App connection URI. **Source: Infisical** (dev/prod). Fake password in `.env.example` only |
 
 `.env.example` is the contract in git (fake values + comments). Real `.env` is gitignored. Sync check:
 
@@ -162,6 +194,12 @@ curl -i "http://localhost:3000/listings?limit=2"
 
 | Path | Role |
 |---|---|
+| `db/schema.sql` | MiniBnB tables + foreign keys |
+| `db/seed.sql` | ≥ 100000 rows in `bookings` + `VACUUM (ANALYZE)` |
+| `db/queries/` | q1–q3 (Seq Scan before indexes) |
+| `db/indexes.sql` | btree + partial + `lower(status)` |
+| `db/OPTIMIZATIONS.md` | EXPLAIN before/after |
+| `secrets/db_password.example` | Dev password for a fresh clone |
 | `openapi/openapi.yaml` | Contract: listings, bookings, health, cursor, Idempotency-Key, problem+json |
 | `src/config/env.schema.ts` | Zod env schema + fail-fast `validate` |
 | `scripts/check-env-example.mjs` | `.env.example` vs schema (`npm run check:env`) |
