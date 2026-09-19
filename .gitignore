@@ -5,4 +5,5 @@ dist/
 body-*.json
 .env
 secrets/*
+.secrets/
 !secrets/db_password.example

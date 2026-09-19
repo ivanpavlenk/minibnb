@@ -209,3 +209,69 @@ curl -i "http://localhost:3000/listings?limit=2"
 | `rotate.sh` | Password rotation without process restart |
 | `docker-compose.yml` | Local Postgres |
 | `Dockerfile` / `.dockerignore` | Image without `.env` or `secrets/` |
+| `src/entities/` | TypeORM entities (users, listings, bookings, reviews) |
+| `src/migrations/` | Generated schema migrations (`synchronize: false`) |
+| `src/data-source.ts` | TypeORM DataSource; credentials from `process.env` |
+| `src/seed.ts` | Idempotent demo rows |
+| `src/demo-nplus1.ts` | N+1 naive vs JOIN, query counter |
+| `src/report.ts` | Revenue by city via QueryBuilder |
+| `scripts/with-secrets.sh` | Infisical wrapper; `SKIP_VAULT=1` for CI/grader |
+
+## TypeORM (HW 13)
+
+Schema lives in entities plus a generated migration. `src/data-source.ts` sets `synchronize: false`. Commands that talk to Postgres are wrapped with `bash scripts/with-secrets.sh dev …`. TypeORM reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` from `process.env` (Infisical, or the grader via `SKIP_VAULT=1`). Nest HTTP still uses `DB_PASSWORD_FILE`; that path is separate.
+
+```bash
+npm ci
+npx tsc --noEmit
+docker compose up -d --wait
+npm run build
+npm run migrate
+npm run migrate:show
+npm run seed
+npm run demo:nplus1
+npm run report
+```
+
+### N+1 (booking → listing → owner)
+
+Measured on 8 seeded bookings.
+
+| Strategy | SQL queries |
+|---|---|
+| naive (query per booking in a loop) | 17 |
+| `relations` / JOIN | 1 |
+
+Naive is `1 + 8 + 8`: one `SELECT` for bookings, then listing and owner per row. After the JOIN the count is 1 and does not grow with N.
+
+### Seed counts (idempotent)
+
+```bash
+npm run seed && npm run seed
+docker compose exec -T postgres psql -U minibnb -d minibnb -c "SELECT (SELECT count(*) FROM users) AS users, (SELECT count(*) FROM listings) AS listings, (SELECT count(*) FROM bookings) AS bookings, (SELECT count(*) FROM reviews) AS reviews;"
+```
+
+Expected after one or two seeds: users 10, listings 8, bookings 8, reviews 5.
+
+### Repository vs QueryBuilder
+
+`Repository.find()` is for loading entities by id/where/relations (CRUD, and the N+1 fix with `relations`). `createQueryBuilder()` is for SQL the repository cannot express: aggregates, `GROUP BY`, reports. `src/report.ts` sums confirmed booking revenue per city — that is a QueryBuilder job, not `find()`.
+
+### onDelete
+
+- `listings.owner_id`, `bookings.listing_id`, `bookings.guest_id` → `RESTRICT`: a host, listing, or guest with history must not disappear and leave orphan rows.
+- `reviews.booking_id` → `CASCADE`: a review has no meaning without its booking.
+
+### synchronize
+
+`src/data-source.ts` sets `synchronize: false`. Schema changes go through migrations only.
+
+## Grading
+
+```bash
+docker compose up -d --wait
+export DB_HOST=127.0.0.1 DB_PORT=5433 DB_USER=minibnb DB_PASSWORD=minibnb DB_NAME=minibnb
+export SKIP_VAULT=1    # у грейдера немає доступу до сховища
+```
+
+Host port is **5433** (compose maps `5433:5432`). User, password, and database are `minibnb` as in `docker-compose.yml`.
