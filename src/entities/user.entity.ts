@@ -23,4 +23,7 @@ export class User {
 
     @OneToMany(() => Booking, (booking) => booking.guest)
     bookings!: Booking[];
+
+    @Column({ type: "int", name: "balance_cents", default: 0 })
+    balanceCents!: number;
 }

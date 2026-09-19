@@ -1,10 +1,11 @@
 import "reflect-metadata";
-import { join } from "path";
-import { DataSource } from "typeorm";
-import { User } from "./entities/user.entity";
-import { Listing } from "./entities/listing.entity";
-import { Booking } from "./entities/booking.entity";
-import { Review } from "./entities/review.entity";
+import {join} from "path";
+import {DataSource} from "typeorm";
+import {User} from "./entities/user.entity";
+import {Listing} from "./entities/listing.entity";
+import {Booking} from "./entities/booking.entity";
+import {Review} from "./entities/review.entity";
+import {Job} from "./entities/job.entity";
 
 function requiredEnv(name: string): string {
     const value = process.env[name];
@@ -23,6 +24,6 @@ export const AppDataSource = new DataSource({
     database: requiredEnv("DB_NAME"),
     synchronize: false,
     logging: false,
-    entities: [User, Listing, Booking, Review],
+    entities: [User, Listing, Booking, Review, Job],
     migrations: [join(__dirname, "migrations", "*.js")],
 });

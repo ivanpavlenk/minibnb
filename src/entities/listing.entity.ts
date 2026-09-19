@@ -15,6 +15,9 @@ export class Listing {
     @PrimaryGeneratedColumn({ type: 'bigint' })
     id!: string;
 
+    @Column({ type: "int", default: 1 })
+    stock!: number;
+
     @Column({ type: 'bigint', name: 'owner_id' })
     ownerId!: string;
 

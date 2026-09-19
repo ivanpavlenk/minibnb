@@ -215,6 +215,10 @@ curl -i "http://localhost:3000/listings?limit=2"
 | `src/seed.ts` | Idempotent demo rows |
 | `src/demo-nplus1.ts` | N+1 naive vs JOIN, query counter |
 | `src/report.ts` | Revenue by city via QueryBuilder |
+| `src/checkout.ts` | Transactional hostel-bed booking + job enqueue |
+| `src/demo-race.ts` | 50 parallel checkouts vs stock = 10 |
+| `src/demo-workers.ts` | Two workers, `FOR UPDATE SKIP LOCKED` |
+| `src/demo-retry.ts` | Retry wrapper for `40001` / `40P01` |
 | `scripts/with-secrets.sh` | Infisical wrapper; `SKIP_VAULT=1` for CI/grader |
 
 ## TypeORM (HW 13)
@@ -266,6 +270,46 @@ Expected after one or two seeds: users 10, listings 8, bookings 8, reviews 5.
 
 `src/data-source.ts` sets `synchronize: false`. Schema changes go through migrations only.
 
+## Конкурентність (HW 14)
+
+Checkout runs in one transaction: atomic `UPDATE listings SET stock = stock - $n WHERE stock >= $n RETURNING`, then the same for `users.balance_cents`, then `INSERT` booking and job. If beds or money are missing, the whole transaction rolls back — no orphan bookings.
+
+`stock` is free hostel beds, not copies of an apartment. The race listing is a 10-bed hostel.
+
+**Pessimistic `SELECT FOR UPDATE` vs atomic `UPDATE … RETURNING`.** Checkout uses the atomic `UPDATE`. One statement both checks and decrements; 0 rows means no beds. There is no JavaScript read-modify-write window. `FOR UPDATE` would also be valid (lock the row, then update); we skip the extra round-trip.
+
+Retry catches **only** Postgres `40001` (serialization failure) and `40P01` (deadlock). Those mean “start the transaction over”. “No beds” / “no money” are business refusals and must not be retried. A retry reruns the **whole** transaction, including reads.
+
+### Race (`npm run demo:race`)
+
+50 parallel checkouts, qty = 1, initial stock = 10. Guest balances are huge so only stock limits success.
+
+| | |
+|---|---|
+| attempts | 50 |
+| successful | 10 |
+| final stock | 0 |
+| negative stock rows | 0 |
+
+### Workers (`npm run demo:workers`)
+
+Two in-process workers claim `jobs` with `SELECT … FOR UPDATE SKIP LOCKED`. Processing stays in the same transaction as the lock.
+
+| | |
+|---|---|
+| worker w1 | 15 |
+| worker w2 | 15 |
+| processed twice | 0 |
+| elapsed ms | 1554 |
+
+15+15 includes leftover email jobs from the race plus 20 demo jobs.
+
+### Retry (`npm run demo:retry`)
+
+Two concurrent read-modify-write bumps under `REPEATABLE READ`, wrapped with backoff on `40001` / `40P01` only.
+
+Logged several `caught 40001` retries. Start `1000000`, 20 bumps, final `1000020` (= expected).
+
 ## Grading
 
 ```bash
@@ -275,3 +319,5 @@ export SKIP_VAULT=1    # у грейдера немає доступу до сх
 ```
 
 Host port is **5433** (compose maps `5433:5432`). User, password, and database are `minibnb` as in `docker-compose.yml`.
+
+Then: `npm ci && npx tsc --noEmit`, `npm run build`, `npm run migrate`, `npm run seed`, `npm run demo:race`, `npm run demo:workers`, `npm run demo:retry`.
