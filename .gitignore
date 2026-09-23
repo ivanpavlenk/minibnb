@@ -7,3 +7,4 @@ body-*.json
 secrets/*
 .secrets/
 !secrets/db_password.example
+backups/*.dump

@@ -207,7 +207,12 @@ curl -i "http://localhost:3000/listings?limit=2"
 | `src/health/` | `GET /health` (uptime + DB ping) |
 | `secrets/db_password` | DB password file (gitignored) |
 | `rotate.sh` | Password rotation without process restart |
-| `docker-compose.yml` | Local Postgres |
+| `docker-compose.yml` | Local Postgres + PgBouncer |
+| `pgbouncer/` | `pool_mode = transaction` config + userlist |
+| `scripts/backup.sh` | Dated `pg_dump -Fc` into `backups/` |
+| `scripts/restore-drill.sh` | Restore into a fresh volume and print MATCH |
+| `backup.cron` | Nightly backup schedule |
+| `RESTORE-DRILL.md` | Drill protocol: dump size, RTO, RPO |
 | `Dockerfile` / `.dockerignore` | Image without `.env` or `secrets/` |
 | `src/entities/` | TypeORM entities (users, listings, bookings, reviews) |
 | `src/migrations/` | Generated schema migrations (`synchronize: false`) |
@@ -310,14 +315,49 @@ Two concurrent read-modify-write bumps under `REPEATABLE READ`, wrapped with bac
 
 Logged several `caught 40001` retries. Start `1000000`, 20 bumps, final `1000020` (= expected).
 
+## Data layer ops (HW 15)
+
+The app reaches Postgres through **PgBouncer** (host port **6432**), not through the published Postgres port 5433. Compose still maps Postgres at 5433 for emergencies; TypeORM / `DATABASE_URL` use 6432.
+
+**Why `pool_mode = transaction`:** many API processes can share a small set of real Postgres connections. PgBouncer assigns a server connection for one transaction, then gives it to another client. That is enough for checkout (`BEGIN` … `COMMIT`) and cheaper than session pooling.
+
+Transaction mode **breaks session-scoped features**, at least:
+
+1. **Named prepared statements** — they live on a server session; after COMMIT that session may serve someone else.
+2. **Temporary tables** (`CREATE TEMP TABLE`) — they disappear when the session is returned to the pool.
+3. **LISTEN/NOTIFY** (and `WITH HOLD` cursors / leftover session `SET`) — notifications and session state do not follow the client to the next checkout.
+
+Mitigation in this repo: `max_prepared_statements = 200` in `pgbouncer/pgbouncer.ini`.
+
+### Backup
+
+```bash
+export DATABASE_URL=postgres://minibnb:minibnb@127.0.0.1:6432/minibnb
+export SKIP_VAULT=1
+bash scripts/with-secrets.sh dev bash scripts/backup.sh
+```
+
+Prints the dump path (`backups/minibnb-YYYY-MM-DD.dump`). Schedule: `backup.cron` (03:00 every night).
+
+### Restore
+
+```bash
+bash scripts/with-secrets.sh dev bash scripts/restore-drill.sh
+```
+
+Restores the newest dump into a **new empty** Postgres volume, compares `count(*)|sum(total_amount)` on `bookings`, prints `MATCH`, then deletes the drill container and volume. Protocol: `RESTORE-DRILL.md`.
+
 ## Grading
 
 ```bash
 docker compose up -d --wait
-export DB_HOST=127.0.0.1 DB_PORT=5433 DB_USER=minibnb DB_PASSWORD=minibnb DB_NAME=minibnb
+export DB_HOST=127.0.0.1 DB_PORT=6432 DB_USER=minibnb DB_PASSWORD=minibnb DB_NAME=minibnb
+export DATABASE_URL=postgres://minibnb:minibnb@127.0.0.1:6432/minibnb
 export SKIP_VAULT=1    # у грейдера немає доступу до сховища
+bash scripts/with-secrets.sh dev bash scripts/backup.sh
+bash scripts/with-secrets.sh dev bash scripts/restore-drill.sh
 ```
 
-Host port is **5433** (compose maps `5433:5432`). User, password, and database are `minibnb` as in `docker-compose.yml`.
+Host **6432** is PgBouncer (`6432:6432`). User/password/database are `minibnb`. Direct Postgres remains `5433` and is not the app connection string.
 
-Then: `npm ci && npx tsc --noEmit`, `npm run build`, `npm run migrate`, `npm run seed`, `npm run demo:race`, `npm run demo:workers`, `npm run demo:retry`.
+`backup.sh` / `restore-drill.sh` read `DATABASE_URL` from the environment (the wrapper does not invent a new env file). With `SKIP_VAULT=1` the wrapper just runs the command.
