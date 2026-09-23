@@ -3,6 +3,7 @@ import {
     Column,
     CreateDateColumn,
     Entity,
+    Index,
     JoinColumn,
     ManyToOne,
     OneToOne,
@@ -16,6 +17,10 @@ export type BookingStatus = 'requested' | 'confirmed' | 'cancelled';
 
 @Entity({ name: 'bookings' })
 @Check(`"check_out" > "check_in"`)
+@Check(`"status" IN ('requested', 'confirmed', 'cancelled')`)
+@Index('bookings_guest_created_idx', ['guestId', 'createdAt'])
+@Index('bookings_cancelled_idx', ['guestId'], { where: "status = 'cancelled'" })
+@Index('bookings_lower_status_idx', { synchronize: false })
 export class Booking {
     @PrimaryGeneratedColumn({ type: 'bigint' })
     id!: string;
