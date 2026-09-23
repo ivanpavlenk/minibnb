@@ -1,0 +1,10 @@
+node_modules/
+spec.json
+.idea
+dist/
+body-*.json
+.env
+secrets/*
+.secrets/
+!secrets/db_password.example
+backups/*.dump
