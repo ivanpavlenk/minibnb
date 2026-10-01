@@ -7,19 +7,18 @@ import {validate} from "./config/env.schema";
 import {HealthModule} from "./health/health.module";
 import {DbModule} from "./db/db.module";
 
-
 @Module({
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
             validate,
+            ignoreEnvFile: process.env.NODE_ENV === 'test',
         }),
         StoreModule,
         HealthModule,
         DbModule,
         ListingsModule,
         BookingsModule,
-
     ],
 })
 export class AppModule {

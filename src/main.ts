@@ -1,44 +1,18 @@
 import 'reflect-metadata';
-import { join } from 'path';
 import { NestFactory } from '@nestjs/core';
-import { json, NextFunction, Request, Response, urlencoded } from 'express';
-import * as OpenApiValidator from 'express-openapi-validator';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
-import { ProblemExceptionFilter } from './common/problem.filter';
-import {ConfigService} from "@nestjs/config";
-import {Env} from "./config/env.schema";
+import { configureApp } from './app.setup';
+import { Env } from './config/env.schema';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+    const app = await NestFactory.create(AppModule, { bodyParser: false });
+    configureApp(app);
 
-  app.use(json());
-  app.use(urlencoded({ extended: true }));
-  app.use(
-    OpenApiValidator.middleware({
-      apiSpec: join(__dirname, '..', 'openapi', 'openapi.yaml'),
-      validateRequests: true,
-      validateResponses: true,
-    }),
-  );
-
-  app.useGlobalFilters(new ProblemExceptionFilter());
-
-  const expressApp = app.getHttpAdapter().getInstance();
-  expressApp.use((err: { status?: number; message?: string }, req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status ?? 500;
-    res.status(status).type('application/problem+json').json({
-      type: 'about:blank',
-      title: status >= 500 ? 'Internal Server Error' : 'Bad Request',
-      status,
-      detail: err.message,
-      instance: req.originalUrl,
-    });
-  });
-
-  const config = app.get(ConfigService<Env, true>);
-  const port = config.get('PORT', { infer: true });
-  await app.listen(port);
-  console.log(`MiniBnB API listening on http://localhost:${port}`);
+    const config = app.get(ConfigService<Env, true>);
+    const port = config.get('PORT', { infer: true });
+    await app.listen(port);
+    console.log(`MiniBnB API listening on http://localhost:${port}`);
 }
 
 void bootstrap();

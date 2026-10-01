@@ -1,0 +1,93 @@
+{
+  "consumer": {
+    "name": "MiniBnBWeb"
+  },
+  "interactions": [
+    {
+      "description": "GET /listings/1",
+      "providerStates": [
+        {
+          "name": "listing 1 exists"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/listings/1"
+      },
+      "response": {
+        "body": {
+          "city": "Kyiv",
+          "id": 1,
+          "price_cents": 260000,
+          "title": "Квартира на Подоле"
+        },
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "matchingRules": {
+          "body": {
+            "$.city": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.price_cents": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.title": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "^application/json(;.*)?$"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "17.1.4"
+    },
+    "pactRust": {
+      "ffi": "0.5.8",
+      "models": "1.3.16"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "MiniBnB"
+  }
+}

@@ -347,6 +347,60 @@ bash scripts/with-secrets.sh dev bash scripts/restore-drill.sh
 
 Restores the newest dump into a **new empty** Postgres volume, compares `count(*)|sum(total_amount)` on `bookings`, prints `MATCH`, then deletes the drill container and volume. Protocol: `RESTORE-DRILL.md`.
 
+## Testing (HW 16)
+
+Jest: `reporters: ['default']`, `maxWorkers: 1`. Isolation: **TRUNCATE … CASCADE + RESTART IDENTITY** before each test, one Postgres container per suite. Why not a container-per-test: pulling `postgres:16-alpine` every `it()` is slow. Why not a transaction-ROLLBACK: several cases assert unique/FK (`23505` / `23503`) and `ON CONFLICT`, which need a real COMMIT. Truncate keeps the schema and wipes rows; a second `npm run test:integration` stays green without cleaning the DB by hand. Builders: `aUser()`, `aListing()`.
+
+```bash
+npm ci && npx tsc --noEmit
+npm run test:integration
+npm run test:integration
+npm run test:e2e
+npm run test:contract
+```
+
+Provider verification — two legal forms:
+
+```bash
+# local, secrets from Infisical (same wrapper as HW 11/13)
+bash scripts/with-secrets.sh dev npm run verify:provider
+
+# grader / CI: vault is unreachable, values already in env
+export SKIP_VAULT=1
+export PACT_BROKER_URL=http://127.0.0.1:9292   # optional; without it, verifies pacts/*.json
+npm run verify:provider
+```
+
+`DATABASE_URL` in tests comes from `container.getConnectionUri()`, not from the vault. `PACT_BROKER_URL` / `PACT_BROKER_TOKEN` are env only (token is never in git). Local URL `http://127.0.0.1:9292` is the compose broker, not a secret.
+
+Broker starts with the rest of the stack:
+
+```bash
+docker compose up -d --wait
+export PACT_BROKER_URL=http://127.0.0.1:9292
+export GIT_SHA=local GITHUB_SHA=local SKIP_VAULT=1
+npm run test:contract
+npm run pact:publish          # PUT → 201
+npm run verify:provider       # publishVerificationResult: true
+curl -X PUT "$PACT_BROKER_URL/pacticipants/MiniBnB/versions/local/tags/prod" \
+  -H 'Content-Type: application/json'
+npm run can-i-deploy
+```
+
+`can-i-deploy` **before** the prod tag (`unknown: 1`, `deployable: null`):
+
+```json
+{"summary":{"deployable":null,"reason":"There is no verified pact between version local of MiniBnBWeb and the latest version of MiniBnB with tag prod (no such version exists)","success":0,"failed":0,"unknown":1}}
+```
+
+Same command **after** tagging provider version `local` as `prod` (`deployable: true`):
+
+```json
+{"summary":{"deployable":true,"reason":"All required verification results are published and successful","success":1,"failed":0,"unknown":0}}
+```
+
+CI: publish → verify → tag → can-i-deploy (`.github/workflows/contracts.yml`).
+
 ## Grading
 
 ```bash

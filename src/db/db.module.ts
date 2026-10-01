@@ -16,7 +16,11 @@ import { Env } from '../config/env.schema';
                     port: config.get('DB_PORT', { infer: true }),
                     database: config.get('DB_NAME', { infer: true }),
                     user: config.get('DB_USER', { infer: true }),
-                    password: async () => {
+                    password: () => {
+                        const fromEnv = process.env.DB_PASSWORD;
+                        if (fromEnv) {
+                            return fromEnv;
+                        }
                         const file = config.get('DB_PASSWORD_FILE', { infer: true });
                         return readFileSync(file, 'utf8').trim();
                     },
