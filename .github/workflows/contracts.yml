@@ -1,0 +1,50 @@
+name: contracts
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration
+      - run: npm run test:e2e
+
+  can-i-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      SKIP_VAULT: '1'
+      PACT_BROKER_URL: http://localhost:9292
+      GIT_SHA: ${{ github.sha }}
+      GITHUB_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: docker compose up -d --wait
+      - name: Wait for Pact Broker
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9292/diagnostic/status/heartbeat; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "pact-broker did not become ready"
+          exit 1
+      - run: npm run test:contract
+      - run: npm run pact:publish
+      - run: npm run verify:provider
+      - run: npm run pact:tag
+      - run: npm run can-i-deploy
