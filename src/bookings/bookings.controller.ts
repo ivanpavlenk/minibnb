@@ -19,13 +19,13 @@ export class BookingsController {
 
   @Post()
   @HttpCode(201)
-  create(
+  async create(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     @Body() body: CreateBookingRequest,
   ) {
     const key = String(req.headers['idempotency-key'] ?? '');
-    const { booking, replay } = this.bookings.create(key, body);
+    const { booking, replay } = await this.bookings.create(key, body);
     if (replay) {
       res.set('Idempotency-Replay', 'true');
     }

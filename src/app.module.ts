@@ -6,6 +6,7 @@ import {ConfigModule} from "@nestjs/config";
 import {validate} from "./config/env.schema";
 import {HealthModule} from "./health/health.module";
 import {DbModule} from "./db/db.module";
+import {TypeormModule} from "./db/typeorm.module";
 
 @Module({
     imports: [
@@ -17,6 +18,7 @@ import {DbModule} from "./db/db.module";
         StoreModule,
         HealthModule,
         DbModule,
+        TypeormModule,
         ListingsModule,
         BookingsModule,
     ],

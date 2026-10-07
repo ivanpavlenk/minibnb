@@ -1,6 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { Pool } from 'pg';
 import request from 'supertest';
+import { ensureListingOne } from '../../src/listings/seed-listing-one';
 import { startTestDb, stopTestDb, TestDb } from '../integration/testkit/postgres';
 import { createNestApp } from './create-app';
 
@@ -10,6 +11,7 @@ describe('Bookings E2E (full AppModule)', () => {
 
     beforeAll(async () => {
         db = await startTestDb();
+        await ensureListingOne(db.ds);
         app = await createNestApp();
     }, 120_000);
 

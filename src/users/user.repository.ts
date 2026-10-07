@@ -1,3 +1,4 @@
+import { Injectable } from "@nestjs/common";
 import { DataSource } from "typeorm";
 import { User, UserRole } from "../entities/user.entity";
 
@@ -7,6 +8,7 @@ export type NewUser = {
     balanceCents?: number;
 };
 
+@Injectable()
 export class UserRepository {
     constructor(private readonly dataSource: DataSource) {}
 

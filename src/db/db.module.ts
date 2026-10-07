@@ -1,8 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { Env } from '../config/env.schema';
+import { readDbPassword } from './db-password';
 
 @Global()
 @Module({
@@ -16,14 +16,7 @@ import { Env } from '../config/env.schema';
                     port: config.get('DB_PORT', { infer: true }),
                     database: config.get('DB_NAME', { infer: true }),
                     user: config.get('DB_USER', { infer: true }),
-                    password: () => {
-                        const fromEnv = process.env.DB_PASSWORD;
-                        if (fromEnv) {
-                            return fromEnv;
-                        }
-                        const file = config.get('DB_PASSWORD_FILE', { infer: true });
-                        return readFileSync(file, 'utf8').trim();
-                    },
+                    password: () => readDbPassword(config),
                 });
 
                 pool.on('error', (err) => {

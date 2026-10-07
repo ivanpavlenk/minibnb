@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { Listing } from '../entities/listing.entity';
 
@@ -9,6 +10,7 @@ export type NewListing = {
     stock?: number;
 };
 
+@Injectable()
 export class ListingRepository {
     constructor(private readonly dataSource: DataSource) {}
 
@@ -27,6 +29,17 @@ export class ListingRepository {
 
     async findById(id: string): Promise<Listing | null> {
         return this.dataSource.getRepository(Listing).findOne({ where: { id } });
+    }
+
+    async listAfter(afterId: number | null, limit: number): Promise<Listing[]> {
+        const qb = this.dataSource
+            .createQueryBuilder(Listing, 'listing')
+            .orderBy('listing.id', 'ASC')
+            .take(limit);
+        if (afterId !== null) {
+            qb.andWhere('listing.id > :afterId', { afterId: String(afterId) });
+        }
+        return qb.getMany();
     }
 
     async findWithOwner(id: string): Promise<Listing | null> {

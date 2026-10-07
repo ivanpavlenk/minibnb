@@ -1,30 +1,37 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ProblemException } from '../common/problem.exception';
 import { Listing, ListingPage } from '../common/types';
-import { MemoryStore } from '../store/memory.store';
+import { Listing as ListingRow } from '../entities/listing.entity';
+import { ListingRepository } from './listing.repository';
 
 @Injectable()
 export class ListingsService {
-  constructor(private readonly store: MemoryStore) {}
+  constructor(private readonly listings: ListingRepository) {}
 
-  list(limit = 20, cursor?: string): ListingPage {
-    let rows = this.store.listings.slice().sort((a, b) => a.id - b.id);
-    if (cursor) {
-      const afterId = decodeCursor(cursor);
-      rows = rows.filter((row) => row.id > afterId);
-    }
-    const items = rows.slice(0, limit);
+  async list(limit = 20, cursor?: string): Promise<ListingPage> {
+    const afterId = cursor ? decodeCursor(cursor) : null;
+    const rows = await this.listings.listAfter(afterId, limit + 1);
+    const items = rows.slice(0, limit).map(toApiListing);
     const next_cursor = rows.length > limit ? encodeCursor(items[items.length - 1].id) : null;
     return { items, next_cursor };
   }
 
-  getById(listingId: number): Listing {
-    const listing = this.store.listings.find((row) => row.id === listingId);
+  async getById(listingId: number): Promise<Listing> {
+    const listing = await this.listings.findById(String(listingId));
     if (!listing) {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Not Found', 'Listing not found');
     }
-    return listing;
+    return toApiListing(listing);
   }
+}
+
+export function toApiListing(row: ListingRow): Listing {
+  return {
+    id: Number(row.id),
+    title: row.title,
+    city: row.city,
+    price_cents: row.pricePerNight,
+  };
 }
 
 function encodeCursor(id: number): string {

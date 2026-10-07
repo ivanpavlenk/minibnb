@@ -2,6 +2,8 @@ import path from 'node:path';
 import { INestApplication } from '@nestjs/common';
 import { Verifier } from '@pact-foundation/pact';
 import { Pool } from 'pg';
+import { DataSource } from 'typeorm';
+import { ensureListingOne } from '../../src/listings/seed-listing-one';
 import { startTestDb, stopTestDb, TestDb } from '../integration/testkit/postgres';
 import { createNestApp } from '../e2e/create-app';
 
@@ -37,7 +39,9 @@ describe('MiniBnB pact provider', () => {
             providerBaseUrl: baseUrl,
             providerVersion: version,
             stateHandlers: {
-                'listing 1 exists': async () => undefined,
+                'listing 1 exists': async () => {
+                    await ensureListingOne(app.get(DataSource));
+                },
             },
             ...(broker
                 ? {

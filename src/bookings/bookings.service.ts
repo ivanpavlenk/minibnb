@@ -1,26 +1,42 @@
 import { createHash } from 'crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { BookingRepository } from './booking.repository';
 import { ProblemException } from '../common/problem.exception';
 import { Booking, CreateBookingRequest } from '../common/types';
+import { Booking as BookingRow } from '../entities/booking.entity';
+import { ListingRepository } from '../listings/listing.repository';
+import { toApiListing } from '../listings/listings.service';
 import { MemoryStore } from '../store/memory.store';
+import { UserRepository } from '../users/user.repository';
 
 @Injectable()
 export class BookingsService {
-  constructor(private readonly store: MemoryStore) {}
+  private readonly guestsByBookingId = new Map<number, number>();
 
-  list(): Booking[] {
-    return this.store.bookings;
+  constructor(
+    private readonly store: MemoryStore,
+    private readonly listings: ListingRepository,
+    private readonly bookings: BookingRepository,
+    private readonly users: UserRepository,
+  ) {}
+
+  async list(): Promise<Booking[]> {
+    const rows = await this.bookings.findAll();
+    return rows.map((row) => this.toApiBooking(row));
   }
 
-  getById(bookingId: number): Booking {
-    const booking = this.store.bookings.find((row) => row.id === bookingId);
-    if (!booking) {
+  async getById(bookingId: number): Promise<Booking> {
+    const row = await this.bookings.findById(String(bookingId));
+    if (!row) {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Not Found', 'Booking not found');
     }
-    return booking;
+    return this.toApiBooking(row);
   }
 
-  create(idempotencyKey: string, body: CreateBookingRequest): { booking: Booking; replay: boolean } {
+  async create(
+    idempotencyKey: string,
+    body: CreateBookingRequest,
+  ): Promise<{ booking: Booking; replay: boolean }> {
     const hash = hashBody(body);
     const seen = this.store.idempotencyKeys.get(idempotencyKey);
 
@@ -36,10 +52,11 @@ export class BookingsService {
       return { booking: seen.booking, replay: true };
     }
 
-    const listing = this.store.listings.find((row) => row.id === body.listing_id);
-    if (!listing) {
+    const listingRow = await this.listings.findById(String(body.listing_id));
+    if (!listingRow) {
       throw new ProblemException(HttpStatus.NOT_FOUND, 'Not Found', 'Listing not found');
     }
+    const listing = toApiListing(listingRow);
 
     const nights = Math.round(
       (new Date(body.check_out).getTime() - new Date(body.check_in).getTime()) / 86400000,
@@ -48,20 +65,51 @@ export class BookingsService {
       throw new ProblemException(HttpStatus.BAD_REQUEST, 'Invalid dates', 'check_out must be after check_in');
     }
 
-    const booking: Booking = {
-      id: this.store.bookings.length + 1,
-      listing_id: listing.id,
-      check_in: body.check_in,
-      check_out: body.check_out,
-      guests: body.guests,
-      total_cents: listing.price_cents * nights,
-      status: 'confirmed',
-    };
+    const guest = await this.users.upsertByEmail({
+      email: 'guest@minibnb.test',
+      role: 'guest',
+    });
 
-    this.store.bookings.push(booking);
+    const saved = await this.bookings.save({
+      listingId: listingRow.id,
+      guestId: guest.id,
+      checkIn: body.check_in,
+      checkOut: body.check_out,
+      status: 'confirmed',
+      totalAmount: listing.price_cents * nights,
+    });
+
+    const booking = this.toApiBooking(saved, body.guests);
     this.store.idempotencyKeys.set(idempotencyKey, { hash, booking });
     return { booking, replay: false };
   }
+
+  private toApiBooking(row: BookingRow, guests?: number): Booking {
+    const id = Number(row.id);
+    if (guests !== undefined) {
+      this.guestsByBookingId.set(id, guests);
+    }
+    const status = row.status === 'cancelled' ? 'cancelled' : 'confirmed';
+    return {
+      id,
+      listing_id: Number(row.listingId),
+      check_in: asDateString(row.checkIn),
+      check_out: asDateString(row.checkOut),
+      guests: this.guestsByBookingId.get(id) ?? 1,
+      total_cents: row.totalAmount,
+      status,
+    };
+  }
+}
+
+function asDateString(value: string | Date): string {
+  if (typeof value === 'string') {
+    return value.slice(0, 10);
+  }
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(value.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function hashBody(body: CreateBookingRequest): string {
