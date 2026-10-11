@@ -41,6 +41,7 @@ describe('MiniBnB pact provider', () => {
             stateHandlers: {
                 'listing 1 exists': async () => {
                     await ensureListingOne(app.get(DataSource));
+                    return { listingId: 1 };
                 },
             },
             ...(broker
