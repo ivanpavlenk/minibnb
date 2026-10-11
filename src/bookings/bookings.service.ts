@@ -8,6 +8,7 @@ import { ListingRepository } from '../listings/listing.repository';
 import { toApiListing } from '../listings/listings.service';
 import { MemoryStore } from '../store/memory.store';
 import { UserRepository } from '../users/user.repository';
+import { OrderEventsService } from './order-events.service';
 
 @Injectable()
 export class BookingsService {
@@ -18,6 +19,7 @@ export class BookingsService {
     private readonly listings: ListingRepository,
     private readonly bookings: BookingRepository,
     private readonly users: UserRepository,
+    private readonly orderEvents: OrderEventsService,
   ) {}
 
   async list(): Promise<Booking[]> {
@@ -36,7 +38,7 @@ export class BookingsService {
   async create(
     idempotencyKey: string,
     body: CreateBookingRequest,
-  ): Promise<{ booking: Booking; replay: boolean }> {
+  ): Promise<{ booking: Booking; replay: boolean; guestId: string }> {
     const hash = hashBody(body);
     const seen = this.store.idempotencyKeys.get(idempotencyKey);
 
@@ -49,7 +51,11 @@ export class BookingsService {
           'https://minibnb.local/problems/idempotency-key-conflict',
         );
       }
-      return { booking: seen.booking, replay: true };
+      const guest = await this.users.upsertByEmail({
+        email: 'guest@minibnb.test',
+        role: 'guest',
+      });
+      return { booking: seen.booking, replay: true, guestId: guest.id };
     }
 
     const listingRow = await this.listings.findById(String(body.listing_id));
@@ -81,7 +87,16 @@ export class BookingsService {
 
     const booking = this.toApiBooking(saved, body.guests);
     this.store.idempotencyKeys.set(idempotencyKey, { hash, booking });
-    return { booking, replay: false };
+    return { booking, replay: false, guestId: guest.id };
+  }
+
+  async updateStatus(bookingId: number, status: 'confirmed' | 'cancelled'): Promise<Booking> {
+    const saved = await this.bookings.updateStatus(String(bookingId), status);
+    if (!saved) {
+      throw new ProblemException(HttpStatus.NOT_FOUND, 'Not Found', 'Booking not found');
+    }
+    this.orderEvents.emitStatus(String(saved.id), saved.status);
+    return this.toApiBooking(saved);
   }
 
   private toApiBooking(row: BookingRow, guests?: number): Booking {

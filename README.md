@@ -401,6 +401,43 @@ Same command **after** tagging provider version `local` as `prod` (`deployable: 
 
 CI: publish → verify → tag → can-i-deploy (`.github/workflows/contracts.yml`).
 
+## Realtime (HW 18)
+
+App must already be up (`npm start`, `tsc` then `node dist` — not `tsx`). Need at least one listing in Postgres (`npm run seed` or existing data).
+
+```bash
+node scripts/realtime-demo.mjs
+echo "exit=$?"
+# A_RECEIVED=1
+# B_RECEIVED=0
+# exit=0
+
+node scripts/realtime-demo.mjs --same-room
+echo "exit=$?"
+# A_RECEIVED=1
+# B_RECEIVED=1
+# exit=0
+```
+
+SSE (booking id from your data):
+
+```bash
+curl -sN --max-time 2 -D - -o /dev/null http://localhost:3000/orders/<id>/events
+```
+
+Two Nest instances without a Redis adapter split Socket.IO rooms: a client on instance A never sees `order.status` emitted on instance B; lecture step 7 fixes that with the Redis adapter (pub/sub between instances).
+
+## Trade-offs: WebSocket vs SSE
+
+For MiniBnB order-status alerts I would keep **SSE** in production: the client does not need to send a stream of events, EventSource reconnects and `Last-Event-ID` replays the gap, and the transport is still HTTP (friendlier to proxies than an Upgrade). Socket.IO stays for join/ack/rooms and for a future chat, but it is heavier than a one-way status pipe.
+
+| Criterion | WebSocket (Socket.IO) | SSE |
+| --- | --- | --- |
+| Channel direction | Full duplex (client `join`, server `order.status`) | Server → client only |
+| Reconnect / recovery | Library reconnect + heartbeat; missed events are app-level | EventSource reconnect + `Last-Event-ID` replay from in-memory buffer |
+| Infrastructure | HTTP 101 Upgrade; some reverse proxies break it | Plain HTTP `text/event-stream`; works through typical proxies |
+| Cost per event | Persistent socket + rooms map in process memory | One held HTTP response; cheap if the operation is not tens of minutes |
+
 ## Grading
 
 ```bash

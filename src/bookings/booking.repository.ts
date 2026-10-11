@@ -36,4 +36,14 @@ export class BookingRepository {
     async findAll(): Promise<Booking[]> {
         return this.dataSource.getRepository(Booking).find({ order: { id: 'ASC' } });
     }
+
+    async updateStatus(id: string, status: BookingStatus): Promise<Booking | null> {
+        const repo = this.dataSource.getRepository(Booking);
+        const row = await repo.findOne({ where: { id } });
+        if (!row) {
+            return null;
+        }
+        row.status = status;
+        return repo.save(row);
+    }
 }

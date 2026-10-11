@@ -12,6 +12,7 @@ export function configureApp(app: INestApplication): void {
             apiSpec: join(__dirname, '..', 'openapi', 'openapi.yaml'),
             validateRequests: true,
             validateResponses: true,
+            ignoreUndocumented: true,
         }),
     );
 
