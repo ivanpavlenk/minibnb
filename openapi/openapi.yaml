@@ -1,0 +1,326 @@
+openapi: 3.0.3
+info:
+  title: MiniBnB API
+  version: 1.0.0
+  description: |
+    HTTP API for stay listings and bookings
+servers:
+  - url: http://localhost:3000
+security: []
+tags:
+  - name: listings
+    description: Stay listings
+  - name: bookings
+    description: Bookings
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Process uptime and database ping
+      responses:
+        '200':
+          description: Process is up and can query Postgres
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ uptime, db ]
+                properties:
+                  uptime:
+                    type: number
+                    description: Seconds since this process started
+                  db:
+                    type: string
+                    enum: [ ok ]
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '500':
+          description: Database is unreachable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /listings:
+    get:
+      operationId: listListings
+      tags: [listings]
+      summary: List listings
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: >
+            Opaque pagination token from a previous next_cursor.
+            Do not parse or invent it; pass the value as received.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A page of listings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingPage'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /listings/{listingId}:
+    get:
+      operationId: getListing
+      tags: [listings]
+      summary: Get a listing by id
+      parameters:
+        - name: listingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Listing not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /bookings:
+    get:
+      operationId: listBookings
+      tags: [bookings]
+      summary: List bookings
+      responses:
+        '200':
+          description: All bookings currently in memory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a booking
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: >
+            Client-generated key for createBooking. Sending the same
+            Idempotency-Key with the same request body returns the original
+            201 response and does not create another booking. The same key
+            with a different body is rejected.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Booking created, or a replay of the same key and body
+          headers:
+            Idempotency-Replay:
+              description: true when this response replays a previous create
+              schema:
+                type: string
+                enum: ['true']
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Listing not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Same Idempotency-Key reused with a different body
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  /bookings/{bookingId}:
+    get:
+      operationId: getBooking
+      tags: [bookings]
+      summary: Get a booking by id
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Booking not found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+components:
+  schemas:
+    Listing:
+      type: object
+      additionalProperties: false
+      required: [id, title, city, price_cents]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+          minLength: 1
+        city:
+          type: string
+          minLength: 1
+        price_cents:
+          type: integer
+          minimum: 0
+          description: Nightly price in cents (integer, not float or decimal string).
+
+    ListingPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Listing'
+        next_cursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page. null means there are no more pages.
+
+    CreateBookingRequest:
+      type: object
+      additionalProperties: false
+      required: [listing_id, check_in, check_out, guests]
+      properties:
+        listing_id:
+          type: integer
+          minimum: 1
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+          minimum: 1
+
+    Booking:
+      type: object
+      additionalProperties: false
+      required: [id, listing_id, check_in, check_out, guests, total_cents, status]
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        listing_id:
+          type: integer
+          minimum: 1
+        check_in:
+          type: string
+          format: date
+        check_out:
+          type: string
+          format: date
+        guests:
+          type: integer
+          minimum: 1
+        total_cents:
+          type: integer
+          minimum: 0
+          description: Total price in cents (integer).
+        status:
+          type: string
+          enum: [confirmed, cancelled]
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI of the error type
+        title:
+          type: string
+          description: Short name
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: What went wrong
+        instance:
+          type: string
+          description: Reference to this specific occurrence
