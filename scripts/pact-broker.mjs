@@ -66,13 +66,22 @@ async function applyProdTag() {
 }
 
 async function canIDeploy() {
-    const participant = process.argv[3] || 'MiniBnBWeb';
+    const participant = process.argv.slice(3).find((arg) => !arg.startsWith('--')) || 'MiniBnBWeb';
+    const expectUnknown =
+        process.env.CAN_I_DEPLOY_EXPECT === 'unknown' || process.argv.includes('--expect-unknown');
     const url = `${broker}/can-i-deploy?pacticipant=${encodeURIComponent(participant)}&version=${encodeURIComponent(version)}&to=${encodeURIComponent(prodTag)}`;
     const res = await fetch(url, { headers: headers() });
     const body = await res.text();
     console.log(body);
     const json = JSON.parse(body);
     const deployable = json.summary?.deployable ?? json.deployable;
+    const unknown = Number(json.summary?.unknown ?? 0);
+    if (expectUnknown) {
+        if (deployable === true || unknown < 1) {
+            throw new Error('expected can-i-deploy unknown before prod tag');
+        }
+        return;
+    }
     if (deployable !== true) {
         process.exit(1);
     }

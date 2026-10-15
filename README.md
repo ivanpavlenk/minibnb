@@ -382,9 +382,9 @@ export GIT_SHA=local GITHUB_SHA=local SKIP_VAULT=1
 npm run test:contract
 npm run pact:publish          # PUT → 201
 npm run verify:provider       # publishVerificationResult: true
-curl -X PUT "$PACT_BROKER_URL/pacticipants/MiniBnB/versions/local/tags/prod" \
-  -H 'Content-Type: application/json'
-npm run can-i-deploy
+CAN_I_DEPLOY_EXPECT=unknown npm run can-i-deploy   # unknown: 1 before prod tag
+npm run pact:tag
+npm run can-i-deploy          # deployable: true after prod tag
 ```
 
 `can-i-deploy` **before** the prod tag (`unknown: 1`, `deployable: null`):
@@ -399,7 +399,7 @@ Same command **after** tagging provider version `local` as `prod` (`deployable: 
 {"summary":{"deployable":true,"reason":"All required verification results are published and successful","success":1,"failed":0,"unknown":0}}
 ```
 
-CI: publish → verify → tag → can-i-deploy (`.github/workflows/contracts.yml`).
+CI: publish → verify → can-i-deploy (unknown) → tag → can-i-deploy (`.github/workflows/contracts.yml`). Tag must not run first: otherwise the gate tags prod itself and is always green.
 
 ## Grading
 
