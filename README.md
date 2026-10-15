@@ -422,7 +422,7 @@ echo "exit=$?"
 SSE (booking id from your data):
 
 ```bash
-curl -sN --max-time 2 -D - -o /dev/null http://localhost:3000/orders/<id>/events
+curl -sN --max-time 2 -D - -o /dev/null -H "x-guest-id: <guestId>" http://localhost:3000/orders/<id>/events
 ```
 
 Two Nest instances without a Redis adapter split Socket.IO rooms: a client on instance A never sees `order.status` emitted on instance B; lecture step 7 fixes that with the Redis adapter (pub/sub between instances).

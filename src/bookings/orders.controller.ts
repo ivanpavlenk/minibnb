@@ -12,15 +12,19 @@ export class OrdersController {
 
     @Get(':id/events')
     async events(@Param('id') id: string, @Req() req: Request, @Res() res: Response) {
+        const guestId = String(req.headers['x-guest-id'] ?? '');
+        if (!guestId) {
+            problem(res, req, 403, 'Forbidden', 'anonymous');
+            return;
+        }
+
         const booking = await this.bookings.findById(id);
         if (!booking) {
-            res.status(404).type('application/problem+json').json({
-                type: 'about:blank',
-                title: 'Not Found',
-                status: 404,
-                detail: 'Booking not found',
-                instance: req.originalUrl,
-            });
+            problem(res, req, 404, 'Not Found', 'Booking not found');
+            return;
+        }
+        if (String(booking.guestId) !== guestId) {
+            problem(res, req, 403, 'Forbidden', 'forbidden');
             return;
         }
 
@@ -46,6 +50,16 @@ export class OrdersController {
             sub.unsubscribe();
         });
     }
+}
+
+function problem(res: Response, req: Request, status: number, title: string, detail: string): void {
+    res.status(status).type('application/problem+json').json({
+        type: 'about:blank',
+        title,
+        status,
+        detail,
+        instance: req.originalUrl,
+    });
 }
 
 function formatSse(event: OrderStatusEvent): string {

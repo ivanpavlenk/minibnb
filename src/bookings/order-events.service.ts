@@ -7,27 +7,50 @@ export type OrderStatusEvent = {
     status: string;
 };
 
+type OrderEventLog = {
+    nextId: number;
+    buffer: OrderStatusEvent[];
+};
+
+const MAX_EVENTS_PER_ORDER = 50;
+
 @Injectable()
 export class OrderEventsService {
-    private nextId = 1;
-    private readonly buffer: OrderStatusEvent[] = [];
+    private readonly logs = new Map<string, OrderEventLog>();
     private readonly subject = new Subject<OrderStatusEvent>();
 
     readonly events$ = this.subject.asObservable();
 
     emitStatus(orderId: string, status: string): OrderStatusEvent {
+        const log = this.logFor(orderId);
         const event: OrderStatusEvent = {
-            id: this.nextId,
+            id: log.nextId,
             orderId,
             status,
         };
-        this.nextId += 1;
-        this.buffer.push(event);
+        log.nextId += 1;
+        log.buffer.push(event);
+        if (log.buffer.length > MAX_EVENTS_PER_ORDER) {
+            log.buffer.shift();
+        }
         this.subject.next(event);
         return event;
     }
 
     eventsAfter(lastEventId: number, orderId: string): OrderStatusEvent[] {
-        return this.buffer.filter((event) => event.orderId === orderId && event.id > lastEventId);
+        const log = this.logs.get(orderId);
+        if (!log) {
+            return [];
+        }
+        return log.buffer.filter((event) => event.id > lastEventId);
+    }
+
+    private logFor(orderId: string): OrderEventLog {
+        let log = this.logs.get(orderId);
+        if (!log) {
+            log = { nextId: 1, buffer: [] };
+            this.logs.set(orderId, log);
+        }
+        return log;
     }
 }
