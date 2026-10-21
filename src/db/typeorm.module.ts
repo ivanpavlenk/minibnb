@@ -7,6 +7,7 @@ import { Job } from '../entities/job.entity';
 import { Listing } from '../entities/listing.entity';
 import { Review } from '../entities/review.entity';
 import { User } from '../entities/user.entity';
+import { ProcessedEvent } from '../entities/processed-event.entity';
 import { BookingRepository } from '../bookings/booking.repository';
 import { ListingRepository } from '../listings/listing.repository';
 import { UserRepository } from '../users/user.repository';
@@ -39,7 +40,7 @@ class TypeormShutdown implements OnModuleDestroy {
                     database: config.get('DB_NAME', { infer: true }),
                     synchronize: false,
                     logging: false,
-                    entities: [User, Listing, Booking, Review, Job],
+                    entities: [User, Listing, Booking, Review, Job, ProcessedEvent],
                 });
                 await ds.initialize();
                 return ds;

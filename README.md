@@ -65,6 +65,7 @@ The database password is **not** an env var. It is read from the file in `DB_PAS
 | `DB_USER` | yes | Database user |
 | `DB_PASSWORD_FILE` | yes | Path to the password file (not the password) |
 | `DATABASE_URL` | no | App connection URI. **Source: Infisical** (dev/prod). Fake password in `.env.example` only |
+| `BROKER_URL` | no | RabbitMQ AMQP URL (`amqp://…:5672`). **Source: Infisical** next to `DATABASE_URL`. Tests omit it and skip the broker |
 
 `.env.example` is the contract in git (fake values + comments). Real `.env` is gitignored. Sync check:
 
@@ -438,17 +439,52 @@ For MiniBnB order-status alerts I would keep **SSE** in production: the client d
 | Infrastructure | HTTP 101 Upgrade; some reverse proxies break it | Plain HTTP `text/event-stream`; works through typical proxies |
 | Cost per event | Persistent socket + rooms map in process memory | One held HTTP response; cheap if the operation is not tens of minutes |
 
+## Async-події через RabbitMQ
+
+WebSocket from HW 18 notifies whoever is connected right now. RabbitMQ keeps `order.placed` until a consumer exists.
+
+Topology is declared by the consumer/bootstrap (`shop.events` topic, `shop.order.placed.q`, binding `order.placed`, DLX `shop.dlx` + `shop.dlq`). The publisher only `basic.publish`s with confirms.
+
+prefetch=10: processing is a single `INSERT` (~5 ms). 10 × 5 ms is far below the stock 30-minute `consumer_timeout`. prefetch=1 would idle the consumer between 2 ms jobs; 10 keeps a small in-flight window without sitting on hundreds of unacked messages.
+
+This is **at-least-once delivery**, not exactly-once. Ack after the effect: if the process dies before ack, Rabbit redelivers. `demo:duplicate` nacks with requeue after the INSERT, so `deliveries>=2` and `effect=1`. Exactly-once *result* is that INSERT `ON CONFLICT DO NOTHING` on `event_id` in Postgres — it survives a consumer restart. RabbitMQ does not give exactly-once delivery. The remaining gap (mark processed vs apply effect) is one COMMIT; that is HW 22.
+
+Default broker `dead-letter-strategy` is enough for this homework (`at-most-once` on overflow is only in the broker log).
+
+```bash
+npm run demo:publish
+# published=5 delivered=5 effect=5 acked=5 dlq=0 prefetch=10
+
+npm run demo:dlq
+# rejected=1 work=0 dlq=1 dlq-reason=rejected effect=0
+
+npm run demo:duplicate
+# deliveries=2 effect=1 skipped=1
+```
+
+Duplicate demo: apply the effect, then `nack(requeue=true)` once, ack the second delivery. Not `channel.close()`.
+
 ## Grading
 
 ```bash
 docker compose up -d --wait
 export DB_HOST=127.0.0.1 DB_PORT=6432 DB_USER=minibnb DB_PASSWORD=minibnb DB_NAME=minibnb
 export DATABASE_URL=postgres://minibnb:minibnb@127.0.0.1:6432/minibnb
+export BROKER_URL=amqp://minibnb:minibnb@127.0.0.1:5672
 export SKIP_VAULT=1    # у грейдера немає доступу до сховища
+npm ci
+npm run demo:publish
+npm run demo:dlq
+npm run demo:duplicate
+```
+
+AMQP is port **5672** (`amqp://…@127.0.0.1:5672`). 15672 is the management UI, not AMQP.
+
+Host **6432** is PgBouncer (`6432:6432`). User/password/database are `minibnb`. Direct Postgres remains `5433` and is not the app connection string.
+
+```bash
 bash scripts/with-secrets.sh dev bash scripts/backup.sh
 bash scripts/with-secrets.sh dev bash scripts/restore-drill.sh
 ```
-
-Host **6432** is PgBouncer (`6432:6432`). User/password/database are `minibnb`. Direct Postgres remains `5433` and is not the app connection string.
 
 `backup.sh` / `restore-drill.sh` read `DATABASE_URL` from the environment (the wrapper does not invent a new env file). With `SKIP_VAULT=1` the wrapper just runs the command.

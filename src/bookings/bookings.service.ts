@@ -8,6 +8,7 @@ import { ListingRepository } from '../listings/listing.repository';
 import { toApiListing } from '../listings/listings.service';
 import { MemoryStore } from '../store/memory.store';
 import { UserRepository } from '../users/user.repository';
+import { OrderPlacedPublisher } from '../broker/order-placed.publisher';
 import { OrderEventsService } from './order-events.service';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class BookingsService {
     private readonly bookings: BookingRepository,
     private readonly users: UserRepository,
     private readonly orderEvents: OrderEventsService,
+    private readonly orderPlaced: OrderPlacedPublisher,
   ) {}
 
   async list(): Promise<Booking[]> {
@@ -87,6 +89,12 @@ export class BookingsService {
 
     const booking = this.toApiBooking(saved, body.guests);
     this.store.idempotencyKeys.set(idempotencyKey, { hash, booking });
+    await this.orderPlaced.publish({
+      eventId: `booking:${saved.id}:placed`,
+      type: 'order.placed',
+      occurredAt: new Date().toISOString(),
+      data: { bookingId: saved.id, listingId: saved.listingId },
+    });
     return { booking, replay: false, guestId: guest.id };
   }
 

@@ -13,6 +13,9 @@ export const envSchema = z.object({
 
     // Real value lives in Infisical (dev/prod). Fake password only in .env.example.
     DATABASE_URL: z.string().min(1).optional(),
+
+    // AMQP URL. Real value lives in Infisical next to DATABASE_URL. Optional so tests skip the broker.
+    BROKER_URL: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
