@@ -1,0 +1,1 @@
+0 3 * * * bash /srv/minibnb/scripts/backup.sh
