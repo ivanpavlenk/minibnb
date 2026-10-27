@@ -53,6 +53,40 @@ services:
       timeout: 10s
       retries: 20
 
+  redis-cache:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --maxmemory
+      - 16mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-queue:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --maxmemory-policy
+      - noeviction
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   pact-broker:
     image: pactfoundation/pact-broker:latest
     depends_on:

@@ -12,6 +12,8 @@ export type NewListing = {
 
 @Injectable()
 export class ListingRepository {
+    dbHits = 0;
+
     constructor(private readonly dataSource: DataSource) {}
 
     async save(input: NewListing): Promise<Listing> {
@@ -28,6 +30,7 @@ export class ListingRepository {
     }
 
     async findById(id: string): Promise<Listing | null> {
+        this.dbHits += 1;
         return this.dataSource.getRepository(Listing).findOne({ where: { id } });
     }
 

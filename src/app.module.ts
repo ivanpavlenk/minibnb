@@ -7,6 +7,9 @@ import {validate} from "./config/env.schema";
 import {HealthModule} from "./health/health.module";
 import {DbModule} from "./db/db.module";
 import {TypeormModule} from "./db/typeorm.module";
+import {RedisModule} from "./redis/redis.module";
+import {RedisHttpModule} from "./redis/redis-http.module";
+import {RatingQueue} from "./queue/rating.queue";
 
 @Module({
     imports: [
@@ -19,9 +22,12 @@ import {TypeormModule} from "./db/typeorm.module";
         HealthModule,
         DbModule,
         TypeormModule,
+        RedisModule,
+        RedisHttpModule,
         ListingsModule,
         BookingsModule,
     ],
+    providers: [RatingQueue],
 })
 export class AppModule {
 }

@@ -16,6 +16,11 @@ export const envSchema = z.object({
 
     // AMQP URL. Real value lives in Infisical next to DATABASE_URL. Optional so tests skip the broker.
     BROKER_URL: z.string().min(1).optional(),
+
+    // Cache Redis (allkeys-lru). Optional so tests skip cache.
+    REDIS_URL: z.string().min(1).optional(),
+    // Queue/session/limit Redis (noeviction). Optional so tests skip BullMQ.
+    REDIS_QUEUE_URL: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

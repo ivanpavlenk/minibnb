@@ -66,6 +66,8 @@ The database password is **not** an env var. It is read from the file in `DB_PAS
 | `DB_PASSWORD_FILE` | yes | Path to the password file (not the password) |
 | `DATABASE_URL` | no | App connection URI. **Source: Infisical** (dev/prod). Fake password in `.env.example` only |
 | `BROKER_URL` | no | RabbitMQ AMQP URL (`amqp://…:5672`). **Source: Infisical** next to `DATABASE_URL`. Tests omit it and skip the broker |
+| `REDIS_URL` | no | Cache Redis (`redis://127.0.0.1:6379`, allkeys-lru). Infisical. Tests omit it |
+| `REDIS_QUEUE_URL` | no | Queue/session/limit Redis (`redis://127.0.0.1:6380`, noeviction). Infisical. Tests omit it |
 
 `.env.example` is the contract in git (fake values + comments). Real `.env` is gitignored. Sync check:
 
@@ -483,6 +485,28 @@ npm run demo:crash-relay
 # published=2 deliveries=2 applied=1 effect=1 processed=1
 ```
 
+## Redis: кеш, сесії, ліміти, черга
+
+Два Redis у compose, бо політики несумісні в одному процесі (`SELECT 1` не рятує): `redis-cache:6379` — `maxmemory 16mb` + `allkeys-lru`; `redis-queue:6380` — `noeviction` + AOF `everysec`. Сесії й rate-limit лежать у **queue**-інстансі: LRU колись викине `sess:…` і виглядатиме як «розлогінило нізвідки».
+
+Картка listing — cache-aside, TTL `300 + random(0..60)` с, single-flight `SET lock NX PX` і зняття тільки свого лока Lua compare-and-delete. Ліміт — ковзне вікно одним Lua (сплеск на межі фіксованого вікна не хочемо; два поди ділять один лічильник). Черга BullMQ: `attempts ≥ 3`, exponential backoff з jitter, `jobId` для дедупа, `removeOnComplete: { age: 3600 }` (не `true`), планувальник `upsertJobScheduler`.
+
+Якщо stampede-лок зламається — два походи в базу замість одного. Це кілька зайвих SELECT, не зіпсований залишок. Тому лок тут оптимізація, а не захист інваріанта.
+
+```bash
+npm run demo:cache
+# cache-lru=1 cache-maxmemory=1 warmed=60 ttl-distinct≥5 concurrent=25 db-calls=1 db-calls-warm=0
+
+npm run demo:session
+# requests=3 sessions=1 in-redis=1 ttl-renewed=1
+
+npm run demo:ratelimit
+# instances=2 limit=5 allowed=5 blocked≥1 status=429 retry-after=1
+
+npm run demo:queue
+# queue-noeviction=1 attempts≥3 completed=1 added=2 queued=1 schedulers≥1 scheduled-runs≥2
+```
+
 ## Grading
 
 ```bash
@@ -490,11 +514,14 @@ docker compose up -d --wait
 export DB_HOST=127.0.0.1 DB_PORT=6432 DB_USER=minibnb DB_PASSWORD=minibnb DB_NAME=minibnb
 export DATABASE_URL=postgres://minibnb:minibnb@127.0.0.1:6432/minibnb
 export BROKER_URL=amqp://minibnb:minibnb@127.0.0.1:5672
+export REDIS_URL=redis://127.0.0.1:6379
+export REDIS_QUEUE_URL=redis://127.0.0.1:6380
 export SKIP_VAULT=1    # у грейдера немає доступу до сховища
 npm ci
-npm run demo:outbox
-npm run demo:crash-write
-npm run demo:crash-relay
+npm run demo:cache
+npm run demo:session
+npm run demo:ratelimit
+npm run demo:queue
 ```
 
 AMQP is port **5672** (`amqp://…@127.0.0.1:5672`). 15672 is the management UI, not AMQP.

@@ -3,10 +3,14 @@ import { ProblemException } from '../common/problem.exception';
 import { Listing, ListingPage } from '../common/types';
 import { Listing as ListingRow } from '../entities/listing.entity';
 import { ListingRepository } from './listing.repository';
+import { ListingCache } from '../redis/listing-cache';
 
 @Injectable()
 export class ListingsService {
-  constructor(private readonly listings: ListingRepository) {}
+  constructor(
+    private readonly listings: ListingRepository,
+    private readonly cache: ListingCache,
+  ) {}
 
   async list(limit = 20, cursor?: string): Promise<ListingPage> {
     const afterId = cursor ? decodeCursor(cursor) : null;
@@ -17,11 +21,23 @@ export class ListingsService {
   }
 
   async getById(listingId: number): Promise<Listing> {
-    const listing = await this.listings.findById(String(listingId));
-    if (!listing) {
-      throw new ProblemException(HttpStatus.NOT_FOUND, 'Not Found', 'Listing not found');
+    const cached = await this.cache.get(listingId);
+    if (cached) {
+      return cached;
     }
-    return toApiListing(listing);
+    return this.cache.withSingleFlight(listingId, async () => {
+      const again = await this.cache.get(listingId);
+      if (again) {
+        return again;
+      }
+      const listing = await this.listings.findById(String(listingId));
+      if (!listing) {
+        throw new ProblemException(HttpStatus.NOT_FOUND, 'Not Found', 'Listing not found');
+      }
+      const api = toApiListing(listing);
+      await this.cache.set(api);
+      return api;
+    });
   }
 }
 
