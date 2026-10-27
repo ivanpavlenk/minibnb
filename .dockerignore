@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+secrets
+.git
+.idea
+.ai
+spec.json
+body-*.json
