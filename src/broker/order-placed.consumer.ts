@@ -5,6 +5,9 @@ import { DataSource } from 'typeorm';
 import { Env } from '../config/env.schema';
 import { assertShopTopology } from './assert-topology';
 import { PREFETCH, WORK_QUEUE } from './broker.constants';
+import { OrderPlacedEvent } from '../outbox/to-order-placed-event';
+
+const CONSUMER = 'order-placed';
 
 @Injectable()
 export class OrderPlacedConsumer implements OnModuleInit, OnModuleDestroy {
@@ -34,15 +37,25 @@ export class OrderPlacedConsumer implements OnModuleInit, OnModuleDestroy {
             return;
         }
         try {
-            const event = JSON.parse(msg.content.toString()) as { eventId?: string };
-            if (!event.eventId) {
+            const event = JSON.parse(msg.content.toString()) as OrderPlacedEvent;
+            if (!event.eventId || !event.data?.bookingId) {
                 this.ch.reject(msg, false);
                 return;
             }
-            await this.ds.query(
-                `INSERT INTO processed_events (event_id) VALUES ($1) ON CONFLICT (event_id) DO NOTHING`,
-                [event.eventId],
-            );
+            await this.ds.transaction(async (manager) => {
+                await manager.query(
+                    `INSERT INTO processed_messages (message_id, consumer)
+                     VALUES ($1, $2)
+                     ON CONFLICT (message_id, consumer) DO NOTHING`,
+                    [event.eventId, CONSUMER],
+                );
+                await manager.query(
+                    `INSERT INTO order_placed_effects (booking_id)
+                     VALUES ($1)
+                     ON CONFLICT (booking_id) DO NOTHING`,
+                    [String(event.data.bookingId)],
+                );
+            });
             this.ch.ack(msg);
         } catch (err) {
             this.log.warn(`reject ${String(err)}`);

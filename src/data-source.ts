@@ -7,6 +7,10 @@ import {Booking} from "./entities/booking.entity";
 import {Review} from "./entities/review.entity";
 import {Job} from "./entities/job.entity";
 import {ProcessedEvent} from "./entities/processed-event.entity";
+import {OutboxEvent} from "./entities/outbox-event.entity";
+import {ProcessedMessage} from "./entities/processed-message.entity";
+import {IdempotencyKey} from "./entities/idempotency-key.entity";
+import {OrderPlacedEffect} from "./entities/order-placed-effect.entity";
 
 function requiredEnv(name: string): string {
     const value = process.env[name];
@@ -25,6 +29,6 @@ export const AppDataSource = new DataSource({
     database: requiredEnv("DB_NAME"),
     synchronize: false,
     logging: false,
-    entities: [User, Listing, Booking, Review, Job, ProcessedEvent],
+    entities: [User, Listing, Booking, Review, Job, ProcessedEvent, OutboxEvent, ProcessedMessage, IdempotencyKey, OrderPlacedEffect],
     migrations: [join(__dirname, "migrations", "*.js")],
 });

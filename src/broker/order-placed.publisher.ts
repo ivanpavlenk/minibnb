@@ -3,16 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import amqp, { ChannelModel, ConfirmChannel } from 'amqplib';
 import { Env } from '../config/env.schema';
 import { EVENTS_EXCHANGE, ROUTING_KEY } from './broker.constants';
+import { OrderPlacedEvent } from '../outbox/to-order-placed-event';
 
-export type OrderPlacedEvent = {
-    eventId: string;
-    type: 'order.placed';
-    occurredAt: string;
-    data: {
-        bookingId: string;
-        listingId: string;
-    };
-};
+export type { OrderPlacedEvent };
 
 @Injectable()
 export class OrderPlacedPublisher implements OnModuleInit, OnModuleDestroy {

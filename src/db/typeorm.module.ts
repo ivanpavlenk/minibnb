@@ -8,6 +8,10 @@ import { Listing } from '../entities/listing.entity';
 import { Review } from '../entities/review.entity';
 import { User } from '../entities/user.entity';
 import { ProcessedEvent } from '../entities/processed-event.entity';
+import { OutboxEvent } from '../entities/outbox-event.entity';
+import { ProcessedMessage } from '../entities/processed-message.entity';
+import { IdempotencyKey } from '../entities/idempotency-key.entity';
+import { OrderPlacedEffect } from '../entities/order-placed-effect.entity';
 import { BookingRepository } from '../bookings/booking.repository';
 import { ListingRepository } from '../listings/listing.repository';
 import { UserRepository } from '../users/user.repository';
@@ -40,7 +44,18 @@ class TypeormShutdown implements OnModuleDestroy {
                     database: config.get('DB_NAME', { infer: true }),
                     synchronize: false,
                     logging: false,
-                    entities: [User, Listing, Booking, Review, Job, ProcessedEvent],
+                    entities: [
+                        User,
+                        Listing,
+                        Booking,
+                        Review,
+                        Job,
+                        ProcessedEvent,
+                        OutboxEvent,
+                        ProcessedMessage,
+                        IdempotencyKey,
+                        OrderPlacedEffect,
+                    ],
                 });
                 await ds.initialize();
                 return ds;

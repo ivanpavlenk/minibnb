@@ -10,6 +10,13 @@ import { Review } from '../../../src/entities/review.entity';
 import { Job } from '../../../src/entities/job.entity';
 import { InitSchema1789302787829 } from '../../../src/migrations/1789302787829-InitSchema';
 import { AddStockBalanceJobs1789812398176 } from '../../../src/migrations/1789812398176-AddStockBalanceJobs';
+import { ProcessedEvents1789990000000 } from '../../../src/migrations/1789990000000-ProcessedEvents';
+import { OutboxAndInbox1790000000000 } from '../../../src/migrations/1790000000000-OutboxAndInbox';
+import { ProcessedEvent } from '../../../src/entities/processed-event.entity';
+import { OutboxEvent } from '../../../src/entities/outbox-event.entity';
+import { ProcessedMessage } from '../../../src/entities/processed-message.entity';
+import { IdempotencyKey } from '../../../src/entities/idempotency-key.entity';
+import { OrderPlacedEffect } from '../../../src/entities/order-placed-effect.entity';
 
 export type TestDb = {
     container: StartedPostgreSqlContainer;
@@ -34,8 +41,24 @@ export async function startTestDb(): Promise<TestDb> {
         database: container.getDatabase(),
         synchronize: false,
         logging: false,
-        entities: [User, Listing, Booking, Review, Job],
-        migrations: [InitSchema1789302787829, AddStockBalanceJobs1789812398176],
+        entities: [
+            User,
+            Listing,
+            Booking,
+            Review,
+            Job,
+            ProcessedEvent,
+            OutboxEvent,
+            ProcessedMessage,
+            IdempotencyKey,
+            OrderPlacedEffect,
+        ],
+        migrations: [
+            InitSchema1789302787829,
+            AddStockBalanceJobs1789812398176,
+            ProcessedEvents1789990000000,
+            OutboxAndInbox1790000000000,
+        ],
     });
     await ds.initialize();
     await ds.runMigrations();
@@ -45,7 +68,7 @@ export async function startTestDb(): Promise<TestDb> {
 
 export async function truncateAll(ds: DataSource): Promise<void> {
     await ds.query(
-        `TRUNCATE TABLE reviews, bookings, listings, jobs, users RESTART IDENTITY CASCADE`,
+        `TRUNCATE TABLE order_placed_effects, processed_messages, idempotency_keys, outbox, processed_events, reviews, bookings, listings, jobs, users RESTART IDENTITY CASCADE`,
     );
 }
 

@@ -464,6 +464,25 @@ npm run demo:duplicate
 
 Duplicate demo: apply the effect, then `nack(requeue=true)` once, ack the second delivery. Not `channel.close()`.
 
+## Outbox та ідемпотентність
+
+`BookingsService.create` більше не кличе брокер усередині транзакції. В одному `COMMIT` лежать бронь, рядок `outbox` і `Idempotency-Key`. Relay після коміту робить `SELECT … FOR UPDATE SKIP LOCKED` → publish → `UPDATE published_at`. Консюмер у одній транзакції пише `processed_messages` і ефект `order_placed_effects` (`ON CONFLICT DO NOTHING` по `booking_id`).
+
+Порядок publish → `published_at` міняти не можна: якщо спершу позначити винесеним, а брокер не підтвердить, рядок більше не виберуть — подія зникла назавжди. Дубль лікується inbox+природним ключем; втрата не лікується. Помилка publish теж не доводить, що повідомлення не доїхало (могла зникнути лише відповідь), тому дедуп обовʼязковий.
+
+Relay у `demo:crash-relay` моделює обрив через `ROLLBACK` рівно між publish і `UPDATE published_at` (не `kill -9`). Outbox чистимо після успішного `published_at` (демо `TRUNCATE`; у проді — окремий job по старих published рядках, інакше частковий індекс роздувається). Порядок між воркерами SKIP LOCKED не обіцяє.
+
+```bash
+npm run demo:outbox
+# requests=2 orders=1 outbox=1 published=1 effect=1 processed=1
+
+npm run demo:crash-write
+# write-failed=1 orders=0 outbox=0 published=0 deliveries=0 effect=0
+
+npm run demo:crash-relay
+# published=2 deliveries=2 applied=1 effect=1 processed=1
+```
+
 ## Grading
 
 ```bash
@@ -473,9 +492,9 @@ export DATABASE_URL=postgres://minibnb:minibnb@127.0.0.1:6432/minibnb
 export BROKER_URL=amqp://minibnb:minibnb@127.0.0.1:5672
 export SKIP_VAULT=1    # у грейдера немає доступу до сховища
 npm ci
-npm run demo:publish
-npm run demo:dlq
-npm run demo:duplicate
+npm run demo:outbox
+npm run demo:crash-write
+npm run demo:crash-relay
 ```
 
 AMQP is port **5672** (`amqp://…@127.0.0.1:5672`). 15672 is the management UI, not AMQP.
